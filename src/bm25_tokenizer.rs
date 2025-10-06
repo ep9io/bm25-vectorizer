@@ -1,51 +1,3 @@
-//! # BM25 Tokenization Traits
-//!
-//! This module defines the core tokenization and token indexing traits used by the BM25 vectorizer.
-//!
-//! The BM25 (Best Matching 25) algorithm requires two main operations:
-//! 1. **Tokenization**: Breaking text into individual tokens (words, terms, etc.)
-//! 2. **Token Indexing**: Mapping tokens to unique identifiers.
-//!
-//! These traits provide a flexible abstraction that allows users to implement custom
-//! tokenization strategies (e.g., whitespace splitting, stemming, n-grams) and indexing
-//! schemes (e.g., hash-based, etc) according to their specific needs.
-//!
-//! # Examples
-//!
-//! ```rust
-//! use bm25_vectorizer::{Bm25Tokenizer, Bm25TokenIndexer};
-//! use std::collections::HashMap;
-//!
-//! // Simple whitespace tokenizer
-//! struct SimpleTokenizer;
-//!
-//! impl Bm25Tokenizer for SimpleTokenizer {
-//!     fn tokenize(&self, input_text: &str) -> Vec<String> {
-//!         input_text
-//!             .split_whitespace()
-//!             .map(|s| s.to_lowercase())
-//!             .collect()
-//!     }
-//! }
-//!
-//! // Hash-based token indexer
-//! struct HashTokenIndexer;
-//!
-//! impl Bm25TokenIndexer for HashTokenIndexer {
-//!     type Bm25TokenIndex = u64;
-//!
-//!     fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-//!         use std::hash::{Hash, Hasher};
-//!         // Note: Better hashing algorithms can be used (e.g. Murmur3)
-//!         use std::collections::hash_map::DefaultHasher;
-//!         
-//!         let mut hasher = DefaultHasher::new();
-//!         token.hash(&mut hasher);
-//!         hasher.finish()
-//!     }
-//! }
-//! ```
-
 /// Trait for tokenizing text into individual terms for BM25 processing.
 ///
 /// Implementors of this trait define how input text should be broken down into
@@ -113,215 +65,16 @@ pub trait Bm25Tokenizer {
     fn tokenize(&self, input_text: &str) -> Vec<String>;
 }
 
-/// Trait for mapping tokens to unique indices for efficient BM25 processing.
-///
-/// This trait defines how string tokens are converted to numerical or other
-/// indexable representations.
-///
-/// Some indexing strategies include:
-/// - **Hash-based**: Use hash functions (e.g. Murmur3) to map tokens to integers
-/// - **Dictionary-based**: Maintain a mapping from tokens to sequential indices
-///
-/// # Type Parameters
-///
-/// * `Bm25TokenIndex` - The type used to represent token indices. This should
-///   typically implement `Hash`, `Eq`, `Clone`, and other traits required for
-///   use as map keys.
-///
-/// # Examples
-///
-/// ```rust
-/// use bm25_vectorizer::Bm25TokenIndexer;
-/// use std::collections::HashMap;
-///
-/// // Hash-based token indexer
-/// struct HashTokenIndexer;
-///
-/// impl Bm25TokenIndexer for HashTokenIndexer {
-///     type Bm25TokenIndex = u64;
-///
-///     fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-///         use std::hash::{Hash, Hasher};
-///         // Note: Better hashing algorithms can be used (e.g. Murmur3)
-///         use std::collections::hash_map::DefaultHasher;
-///
-///         let mut hasher = DefaultHasher::new();
-///        token.hash(&mut hasher);
-///         hasher.finish()
-///     }
-/// }
-///
-/// // Dictionary-based token indexer
-/// struct DictionaryIndexer {
-///     token_to_id: HashMap<String, usize>,
-///     next_id: usize,
-/// }
-///
-/// impl DictionaryIndexer {
-///     fn new() -> Self {
-///         Self {
-///             token_to_id: HashMap::new(),
-///             next_id: 0,
-///         }
-///     }
-/// }
-///
-/// impl Bm25TokenIndexer for DictionaryIndexer {
-///     type Bm25TokenIndex = usize;
-///
-///     fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-///         // Note: In a real implementation, you'd want interior mutability
-///         // or a different API design to handle the mutable state
-///         self.token_to_id.get(token).copied().unwrap_or(0)
-///     }
-/// }
-/// ```
-pub trait Bm25TokenIndexer {
-    /// The type used to represent token indices.
-    /// This associated type defines what kind of index representation is used
-    /// for tokens.
-    type Bm25TokenIndex;
-
-    /// Maps a token string to its corresponding index representation.
-    ///
-    /// This method converts a string token into the index type defined by
-    /// `Bm25TokenIndex`.
-    ///
-    /// # Arguments
-    ///
-    /// * `token` - The string token to be indexed
-    ///
-    /// # Returns
-    ///
-    /// An index of type `Self::Bm25TokenIndex` that uniquely represents the token
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use bm25_vectorizer::Bm25TokenIndexer;
-    /// use std::hash::{Hash, Hasher, DefaultHasher};
-    ///
-    /// struct HashIndexer;
-    ///
-    /// impl Bm25TokenIndexer for HashIndexer {
-    ///     type Bm25TokenIndex = u64;
-    ///
-    ///     fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-    ///         let mut hasher = DefaultHasher::new();
-    ///         token.hash(&mut hasher);
-    ///         hasher.finish()
-    ///     }
-    /// }
-    ///
-    /// let indexer = HashIndexer;
-    /// let index1 = indexer.index("hello");
-    /// let index2 = indexer.index("hello");
-    /// assert_eq!(index1, index2); // Same token, same index
-    /// ```
-    fn index(&self, token: &str) -> Self::Bm25TokenIndex;
-}
-
-// Mock implementations for testing and examples
-use std::cell::RefCell;
-use std::collections::{hash_map::DefaultHasher, HashMap};
-use std::hash::{Hash, Hasher};
-
-/// Simple whitespace tokenizer for testing and examples
-pub struct MockWhitespaceTokenizer;
-
-impl Bm25Tokenizer for MockWhitespaceTokenizer {
-    fn tokenize(&self, input_text: &str) -> Vec<String> {
-        input_text
-            .split_whitespace()
-            .map(|s| s.to_lowercase())
-            .collect()
-    }
-}
-
-/// Case-preserving tokenizer for testing and examples
-pub struct MockCasePreservingTokenizer;
-
-impl Bm25Tokenizer for MockCasePreservingTokenizer {
-    fn tokenize(&self, input_text: &str) -> Vec<String> {
-        input_text.split_whitespace().map(String::from).collect()
-    }
-}
-
-/// Punctuation-aware tokenizer for testing and examples
-pub struct MockPunctuationTokenizer;
-
-impl Bm25Tokenizer for MockPunctuationTokenizer {
-    fn tokenize(&self, input_text: &str) -> Vec<String> {
-        input_text
-            .chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-            .collect::<String>()
-            .split_whitespace()
-            .map(|s| s.to_lowercase())
-            .collect()
-    }
-}
-
-/// Hash-based token indexer for testing and examples
-pub struct MockHashTokenIndexer;
-
-impl Bm25TokenIndexer for MockHashTokenIndexer {
-    type Bm25TokenIndex = u64;
-
-    fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-        let mut hasher = DefaultHasher::new();
-        token.hash(&mut hasher);
-        hasher.finish()
-    }
-}
-
-/// Dictionary-based token indexer with interior mutability for testing and examples
-pub struct MockDictionaryTokenIndexer {
-    token_to_id: RefCell<HashMap<String, usize>>,
-    next_id: RefCell<usize>,
-}
-
-impl MockDictionaryTokenIndexer {
-    pub fn new() -> Self {
-        Self {
-            token_to_id: RefCell::new(HashMap::new()),
-            next_id: RefCell::new(0),
-        }
-    }
-}
-
-impl Bm25TokenIndexer for MockDictionaryTokenIndexer {
-    type Bm25TokenIndex = usize;
-
-    fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-        let mut token_map = self.token_to_id.borrow_mut();
-        let mut next_id = self.next_id.borrow_mut();
-
-        if let Some(&id) = token_map.get(token) {
-            id
-        } else {
-            let id = *next_id;
-            token_map.insert(token.to_string(), id);
-            *next_id += 1;
-            id
-        }
-    }
-}
-
-/// String-based token indexer for testing and examples
-pub struct MockStringTokenIndexer;
-
-impl Bm25TokenIndexer for MockStringTokenIndexer {
-    type Bm25TokenIndex = String;
-
-    fn index(&self, token: &str) -> Self::Bm25TokenIndex {
-        format!("idx_{}", token)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mocking::{
+        MockCasePreservingTokenizer,
+        MockPunctuationTokenizer, MockWhitespaceTokenizer,
+    };
+    use rust_stemmers::{Algorithm as StemmingAlgorithm, Stemmer};
+    use stop_words::{get, LANGUAGE as StopWordLanguage};
+    use unicode_segmentation::UnicodeSegmentation;
 
     // Tests for Bm25Tokenizer trait
 
@@ -388,177 +141,6 @@ mod tests {
         assert_eq!(tokens, vec!["version", "20", "is", "great"]);
     }
 
-    // Tests for Bm25TokenIndexer trait
-
-    #[test]
-    fn test_hash_token_indexer_deterministic() {
-        let indexer = MockHashTokenIndexer;
-        let index1 = indexer.index("hello");
-        let index2 = indexer.index("hello");
-        assert_eq!(index1, index2, "Same token should produce same index");
-    }
-
-    #[test]
-    fn test_hash_token_indexer_different_tokens() {
-        let indexer = MockHashTokenIndexer;
-        let index1 = indexer.index("hello");
-        let index2 = indexer.index("world");
-        assert_ne!(
-            index1, index2,
-            "Different tokens should produce different indices"
-        );
-    }
-
-    #[test]
-    fn test_hash_token_indexer_case_sensitivity() {
-        let indexer = MockHashTokenIndexer;
-        let index1 = indexer.index("hello");
-        let index2 = indexer.index("Hello");
-        assert_ne!(
-            index1, index2,
-            "Case-different tokens should produce different indices"
-        );
-    }
-
-    #[test]
-    fn test_dictionary_token_indexer_sequential() {
-        let indexer = MockDictionaryTokenIndexer::new();
-        let index1 = indexer.index("hello");
-        let index2 = indexer.index("world");
-        let index3 = indexer.index("rust");
-
-        assert_eq!(index1, 0);
-        assert_eq!(index2, 1);
-        assert_eq!(index3, 2);
-    }
-
-    #[test]
-    fn test_dictionary_token_indexer_deterministic() {
-        let indexer = MockDictionaryTokenIndexer::new();
-        let index1 = indexer.index("hello");
-        let index2 = indexer.index("world");
-        let index3 = indexer.index("hello"); // Repeat
-
-        assert_eq!(index1, index3, "Same token should produce same index");
-        assert_ne!(
-            index1, index2,
-            "Different tokens should produce different indices"
-        );
-    }
-
-    #[test]
-    fn test_dictionary_token_indexer_empty_string() {
-        let indexer = MockDictionaryTokenIndexer::new();
-        let index1 = indexer.index("");
-        let index2 = indexer.index("");
-        assert_eq!(
-            index1, index2,
-            "Empty string should be handled consistently"
-        );
-    }
-
-    #[test]
-    fn test_string_token_indexer() {
-        let indexer = MockStringTokenIndexer;
-        let index1 = indexer.index("hello");
-        let index2 = indexer.index("world");
-
-        assert_eq!(index1, "idx_hello");
-        assert_eq!(index2, "idx_world");
-    }
-
-    #[test]
-    fn test_string_token_indexer_deterministic() {
-        let indexer = MockStringTokenIndexer;
-        let index1 = indexer.index("test");
-        let index2 = indexer.index("test");
-        assert_eq!(index1, index2, "Same token should produce same index");
-    }
-
-    // Integration tests combining tokenizer and indexer
-
-    #[test]
-    fn test_tokenizer_indexer_integration() {
-        let tokenizer = MockWhitespaceTokenizer;
-        let indexer = MockHashTokenIndexer;
-
-        let text = "hello world hello rust";
-        let tokens = tokenizer.tokenize(text);
-        let indices: Vec<u64> = tokens.iter().map(|token| indexer.index(token)).collect();
-
-        // Should have 4 indices
-        assert_eq!(indices.len(), 4);
-
-        // "hello" appears twice and should have the same index
-        assert_eq!(
-            indices[0], indices[2],
-            "Repeated token 'hello' should have same index"
-        );
-
-        // All other tokens should be different
-        assert_ne!(
-            indices[0], indices[1],
-            "'hello' and 'world' should have different indices"
-        );
-        assert_ne!(
-            indices[1], indices[3],
-            "'world' and 'rust' should have different indices"
-        );
-        assert_ne!(
-            indices[0], indices[3],
-            "'hello' and 'rust' should have different indices"
-        );
-    }
-
-    #[test]
-    fn test_dictionary_indexer_with_tokenizer() {
-        let tokenizer = MockWhitespaceTokenizer;
-        let indexer = MockDictionaryTokenIndexer::new();
-
-        let text = "the quick brown fox jumps over the lazy dog";
-        let tokens = tokenizer.tokenize(text);
-        let indices: Vec<usize> = tokens.iter().map(|token| indexer.index(token)).collect();
-
-        // Should have 9 indices (same length as tokens)
-        assert_eq!(indices.len(), 9);
-
-        // "the" appears twice at positions 0 and 6, should have same index
-        let the_index = indexer.index("the");
-        assert_eq!(indices[0], the_index);
-        assert_eq!(indices[6], the_index);
-        assert_eq!(
-            indices[0], indices[6],
-            "Repeated token 'the' should have same index"
-        );
-    }
-
-    #[test]
-    fn test_edge_cases() {
-        let tokenizer = MockWhitespaceTokenizer;
-        let indexer = MockHashTokenIndexer;
-
-        // Test with whitespace-only string
-        let tokens = tokenizer.tokenize("   \t  \n  ");
-        assert!(
-            tokens.is_empty(),
-            "Whitespace-only string should produce no tokens"
-        );
-
-        // Test with single character
-        let tokens = tokenizer.tokenize("a");
-        assert_eq!(tokens, vec!["a"]);
-        let index = indexer.index(&tokens[0]);
-        assert!(index > 0, "Single character should produce valid index");
-
-        // Test with very long token
-        let long_token = "a".repeat(1000);
-        let index1 = indexer.index(&long_token);
-        let index2 = indexer.index(&long_token);
-        assert_eq!(index1, index2, "Long token should be handled consistently");
-    }
-
-    // Property-based style tests
-
     #[test]
     fn test_tokenizer_properties() {
         let tokenizer = MockWhitespaceTokenizer;
@@ -582,23 +164,137 @@ mod tests {
         }
     }
 
+    /// Example tokenizer.
+    /// Performs: Unicode normalisation → lowercase → tokenisation → stop word removal → stemming
+    struct SampleNlpTokenizer;
+
+    impl SampleNlpTokenizer {
+        fn new() -> Self {
+            Self
+        }
+    }
+
+    impl Bm25Tokenizer for SampleNlpTokenizer {
+        /// Tokenizes input text through a NLP pipeline.
+        ///
+        /// # Processing Steps
+        ///
+        /// 1. **Unicode Normalisation**: Converts non-ASCII characters to ASCII equivalents
+        /// 2. **Lowercase Conversion**: Ensures case-insensitive matching
+        /// 3. **Word Segmentation**: Splits text into tokens using Unicode word boundaries
+        /// 4. **Stop Word Removal**: Filters out common words (e.g., "the", "is", "at")
+        /// 5. **Stemming**: Reduces words to their root form (e.g., "running" → "run")
+        fn tokenize(&self, input_text: &str) -> Vec<String> {
+            // Step 1: Normalise Unicode characters to ASCII
+            // U+FFFD � REPLACEMENT CHARACTER used to replace an unknown, unrecognised, or unrepresentable character
+            let text = deunicode::deunicode_with_tofu_cow(input_text, "�");
+
+            // Step 2: Convert to lowercase for consistent processing
+            let text = text.to_lowercase();
+
+            // Step 3: Tokenise into words using Unicode segmentation
+            let tokens: Vec<&str> = text
+                .unicode_words()
+                .filter(|word| !word.is_empty())
+                .collect();
+
+            // Step 4 & 5: Remove stop words and apply stemming
+            let stop_words = get(StopWordLanguage::English);
+            let stemmer = Stemmer::create(StemmingAlgorithm::English);
+
+            tokens
+                .into_iter()
+                .filter(|token| !stop_words.contains(&*token))
+                .map(|token| stemmer.stem(token).to_string())
+                .collect()
+        }
+    }
+
     #[test]
-    fn test_indexer_properties() {
-        let indexer = MockHashTokenIndexer;
+    fn test_nlp_tokenizer_basic() {
+        let tokenizer = SampleNlpTokenizer::new();
+        let tokens = tokenizer.tokenize("The quick brown fox jumps over the lazy dog");
+        // Tokens:
+        // [0] = {alloc::string::String} "quick"
+        // [1] = {alloc::string::String} "brown"
+        // [2] = {alloc::string::String} "fox"
+        // [3] = {alloc::string::String} "jump"
+        // [4] = {alloc::string::String} "lazi"
 
-        // Property: same input should always produce same output
-        let token = "consistent";
-        let index1 = indexer.index(token);
-        let index2 = indexer.index(token);
-        assert_eq!(index1, index2, "Indexer should be deterministic");
+        // Should not contain stop words
+        assert!(!tokens.contains(&"the".to_string()));
+        assert!(!tokens.contains(&"over".to_string()));
 
-        // Property: different inputs should generally produce different outputs
-        // (Note: hash collisions are possible but rare)
-        let index_a = indexer.index("a");
-        let index_b = indexer.index("b");
-        assert_ne!(
-            index_a, index_b,
-            "Different tokens should generally have different indices"
+        // Should contain stemmed content words
+        assert!(tokens.iter().any(|t| t.starts_with("quick")));
+        assert!(tokens.iter().any(|t| t.starts_with("jump")));
+    }
+
+    #[test]
+    fn test_nlp_tokenizer_pipeline() {
+        let tokenizer = SampleNlpTokenizer::new();
+        let input_text = "Modern computing owes much to the theoretical foundations laid by pioneers in mathematics and logic.";
+
+        let tokens = tokenizer.tokenize(input_text);
+        // Tokens:
+        // [0] = {alloc::string::String} "modern"
+        // [1] = {alloc::string::String} "comput"
+        // [2] = {alloc::string::String} "owe"
+        // [3] = {alloc::string::String} "theoret"
+        // [4] = {alloc::string::String} "foundat"
+        // [5] = {alloc::string::String} "laid"
+        // [6] = {alloc::string::String} "pioneer"
+        // [7] = {alloc::string::String} "mathemat"
+        // [8] = {alloc::string::String} "logic"
+
+        // Verify tokens are not empty
+        assert!(!tokens.is_empty(), "Token list should not be empty");
+
+        // Verify stop words removed
+        assert!(
+            !tokens.contains(&"to".to_string()),
+            "Stop word 'to' should be removed"
         );
+        assert!(
+            !tokens.contains(&"the".to_string()),
+            "Stop word 'the' should be removed"
+        );
+        assert!(
+            !tokens.contains(&"in".to_string()),
+            "Stop word 'in' should be removed"
+        );
+
+        // Verify stemming applied
+        assert!(
+            tokens.iter().any(|t| t.starts_with("comput")),
+            "Should contain stemmed form of 'computing'"
+        );
+        assert!(
+            tokens.iter().any(|t| t.starts_with("theoret")),
+            "Should contain stemmed form of 'theoretical'"
+        );
+    }
+
+    #[test]
+    fn test_nlp_tokenizer_empty_input() {
+        let tokenizer = SampleNlpTokenizer::new();
+        let tokens = tokenizer.tokenize("");
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_nlp_tokenizer_unicode() {
+        let tokenizer = SampleNlpTokenizer::new();
+        let tokens = tokenizer.tokenize("café résumé naïve");
+        // Tokens:
+        // [0] = {alloc::string::String} "cafe"
+        // [1] = {alloc::string::String} "resum"
+        // [2] = {alloc::string::String} "naiv"
+
+        // Should handle Unicode normalisation
+        assert!(tokens.len() == 3);
+        assert!(tokens.contains(&"cafe".to_string()));
+        assert!(tokens.contains(&"resum".to_string()));
+        assert!(tokens.contains(&"naiv".to_string()));
     }
 }
