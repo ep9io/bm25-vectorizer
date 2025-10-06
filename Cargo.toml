@@ -4,7 +4,7 @@ description = "A minimal Rust library for creating sparse vector representations
 repository = "https://github.com/ep9io/bm25-vectorizer"
 license = "MIT"
 version = "1.0.0"
-edition = "2018"
+edition = "2021"
 keywords = ["bm25", "sparse", "embed", "search", "nlp"]
 categories = ["text-processing"]
 
