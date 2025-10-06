@@ -2,7 +2,7 @@
 name = "bm25-vectorizer"
 description = "A minimal Rust library for creating sparse vector representations (embeddings) using the BM25 algorithm for information retrieval."
 repository = "https://github.com/ep9io/bm25-vectorizer"
-authors = ["Tristan Everitt"]
+authors = ["Tristan Everitt <tristan.ecwhz@9epochs.com>"]
 license = "MIT"
 version = "1.0.0"
 edition = "2021"
