@@ -1,6 +1,6 @@
 //! # BM25 Vectorizer
 //!
-//! This module implements the BM25 (Best Matching 25) ranking function, a probabilistic 
+//! This module implements part of the BM25 (Best Matching 25) ranking function, a probabilistic
 //! ranking algorithm commonly used in information retrieval and search engines.
 //!
 //! ## BM25 Algorithm
@@ -51,7 +51,7 @@
 //! # }
 //! ```
 
-use crate::bm25_tokenizer::{Bm25TokenIndexer, Bm25Tokenizer};
+use crate::bm25_tokenizer::{ Bm25Tokenizer};
 use crate::bm25_vectorizer::Bm25VectorizerError::{
     InvalidAverageDocumentLength, InvalidTermFrequencyLowerBound, InvalidTermRelevanceSaturation,
     MissingAverageDocumentLength, MissingTokenIndexer, MissingTokenizer,
@@ -62,6 +62,7 @@ use std::hash::Hash;
 
 #[cfg(feature = "parallelism")]
 use rayon::prelude::*;
+use crate::Bm25TokenIndexer;
 
 /// Represents a token with its index and BM25 value.
 ///
@@ -87,7 +88,7 @@ pub struct TokenIndexValue<T> {
 /// # Examples
 /// ```rust
 /// use bm25_vectorizer::{TokenIndexValue, SparseRepresentation};
-/// 
+///
 /// let tokens = vec![
 ///     TokenIndexValue { index: 0, value: 1.2 },
 ///     TokenIndexValue { index: 5, value: 0.8 },
@@ -126,8 +127,8 @@ pub struct AverageDocumentLength {
 
 /// The main BM25 vectorizer that converts text into sparse vector representations.
 ///
-/// This struct encapsulates all the parameters and components needed to perform BM25 
-/// vectorization. It uses a tokenizer to break text into tokens and a token indexer 
+/// This struct encapsulates all the parameters and components needed to perform BM25
+/// vectorization. It uses a tokenizer to break text into tokens and a token indexer
 /// to map tokens to indices.
 ///
 /// # Type Parameters
@@ -230,8 +231,13 @@ impl<TokenIndexer, Tokenizer> Bm25Vectorizer<TokenIndexer, Tokenizer> {
 
     /// Converts input text into a sparse BM25 vector representation.
     ///
-    /// This method tokenizes the input text, computes term frequencies, and applies
-    /// the BM25 to generate a sparse vector representation that can then be uploaded to a vector database.
+    /// This method tokenizes the input text, and computes BM25 term frequencies to
+    /// generate a sparse vector representation that can then be uploaded to a vector database.
+    ///
+    /// NOTE: Vector databases might require to specify an IDF modifier when setting up the
+    /// vector store to instruct them to calculate IDF statistics automatically.
+    /// This implementation produces only the normalised term frequency (TF) component in document
+    /// vectors and expects the inverse document frequency (IDF) to be computed by the vector database.
     ///
     /// # Arguments
     /// - `text`: The input text to vectorize
@@ -283,6 +289,7 @@ impl<TokenIndexer, Tokenizer> Bm25Vectorizer<TokenIndexer, Tokenizer> {
                 let denominator = token_frequency
                     + self.k1() * (1.0 - self.b() + self.b() * (doc_length / self.avgdl()));
 
+                // BM25+: adds delta (δ) to ensure minimum contribution from matching terms
                 let value = (numerator / denominator) + self.delta();
 
                 TokenIndexValue { index, value }
@@ -410,7 +417,6 @@ impl<TokenIndexer, Tokenizer> Bm25VectorizerBuilder<TokenIndexer, Tokenizer> {
         Ok(self)
     }
 
-    #[cfg(not(feature = "parallelism"))]
     pub fn fit_iter<I, S>(mut self, corpus: I) -> Result<Self, Bm25VectorizerError>
     where
         I: IntoIterator<Item = S>,
@@ -445,7 +451,10 @@ impl<TokenIndexer, Tokenizer> Bm25VectorizerBuilder<TokenIndexer, Tokenizer> {
                     .into_iter()
                     .par_bridge()
                     .map(|doc| tokenizer.tokenize(doc.as_ref()).len())
-                    .fold(|| (0usize, 0usize), |(count, sum), len| (count + 1, sum + len))
+                    .fold(
+                        || (0usize, 0usize),
+                        |(count, sum), len| (count + 1, sum + len),
+                    )
                     .reduce(|| (0, 0), |(c1, s1), (c2, s2)| (c1 + c2, s1 + s2))
             };
 
@@ -459,7 +468,6 @@ impl<TokenIndexer, Tokenizer> Bm25VectorizerBuilder<TokenIndexer, Tokenizer> {
         }
         Ok(self)
     }
-
 
     pub fn build(self) -> Result<Bm25Vectorizer<TokenIndexer, Tokenizer>, Bm25VectorizerError> {
         let tokenizer = self.tokenizer.ok_or(MissingTokenizer)?;
@@ -515,12 +523,14 @@ pub enum Bm25VectorizerError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bm25_tokenizer::{MockWhitespaceTokenizer, MockHashTokenIndexer, MockDictionaryTokenIndexer};
+    use crate::mocking::{
+        MockDictionaryTokenIndexer, MockHashTokenIndexer, MockWhitespaceTokenizer,
+    };
 
     #[test]
     fn test_builder_new_defaults() {
         let builder = Bm25VectorizerBuilder::<MockHashTokenIndexer, MockWhitespaceTokenizer>::new();
-        
+
         // Check default values
         assert_eq!(builder.k1.k1, 1.2);
         assert_eq!(builder.b.b, 0.75);
@@ -549,21 +559,21 @@ mod tests {
         let result = Bm25VectorizerBuilder::<MockHashTokenIndexer, MockWhitespaceTokenizer>::new()
             .avgdl(10.0)
             .build();
-        
+
         assert!(matches!(result, Err(MissingTokenizer)));
 
         let result = Bm25VectorizerBuilder::<MockHashTokenIndexer, MockWhitespaceTokenizer>::new()
             .tokenizer(MockWhitespaceTokenizer)
             .avgdl(10.0)
             .build();
-        
+
         assert!(matches!(result, Err(MissingTokenIndexer)));
 
         let result = Bm25VectorizerBuilder::<MockHashTokenIndexer, MockWhitespaceTokenizer>::new()
             .tokenizer(MockWhitespaceTokenizer)
             .token_indexer(MockHashTokenIndexer)
             .build();
-        
+
         assert!(matches!(result, Err(MissingAverageDocumentLength)));
     }
 
@@ -576,7 +586,7 @@ mod tests {
             .k1(-1.0)
             .avgdl(10.0)
             .build();
-        
+
         assert!(matches!(result, Err(InvalidTermRelevanceSaturation)));
 
         // Test invalid b values
@@ -586,7 +596,7 @@ mod tests {
             .b(-0.1)
             .avgdl(10.0)
             .build();
-        
+
         assert!(matches!(result, Err(InvalidTermRelevanceSaturation)));
 
         let result = Bm25VectorizerBuilder::new()
@@ -595,7 +605,7 @@ mod tests {
             .b(1.1)
             .avgdl(10.0)
             .build();
-        
+
         assert!(matches!(result, Err(InvalidTermRelevanceSaturation)));
 
         // Test invalid avgdl
@@ -604,7 +614,7 @@ mod tests {
             .token_indexer(MockHashTokenIndexer)
             .avgdl(0.0)
             .build();
-        
+
         assert!(matches!(result, Err(InvalidAverageDocumentLength)));
 
         // Test negative delta
@@ -614,7 +624,7 @@ mod tests {
             .delta(-0.1)
             .avgdl(10.0)
             .build();
-        
+
         assert!(matches!(result, Err(InvalidTermFrequencyLowerBound)));
     }
 
@@ -670,10 +680,10 @@ mod tests {
             .unwrap();
 
         let result = vectorizer.vectorize("hello world");
-        
+
         // Should have 2 tokens
         assert_eq!(result.0.len(), 2);
-        
+
         // All values should be positive due to BM25 formula
         for token in &result.0 {
             assert!(token.value > 0.0);
@@ -690,14 +700,14 @@ mod tests {
             .unwrap();
 
         let result = vectorizer.vectorize("hello hello world");
-        
+
         // Should have 2 unique tokens (hello appears twice, world once)
         assert_eq!(result.0.len(), 2);
-        
+
         // Token for "hello" should have higher value due to higher frequency
-        let hello_value = result.0.iter().find(|t| t.index == 0).unwrap().value;  // "hello" gets index 0
-        let world_value = result.0.iter().find(|t| t.index == 1).unwrap().value;  // "world" gets index 1
-        
+        let hello_value = result.0.iter().find(|t| t.index == 0).unwrap().value; // "hello" gets index 0
+        let world_value = result.0.iter().find(|t| t.index == 1).unwrap().value; // "world" gets index 1
+
         assert!(hello_value > world_value);
     }
 
@@ -745,7 +755,7 @@ mod tests {
         let vectorizer_no_norm = Bm25VectorizerBuilder::new()
             .tokenizer(MockWhitespaceTokenizer)
             .token_indexer(MockDictionaryTokenIndexer::new())
-            .b(0.0)  // No length normalisation
+            .b(0.0) // No length normalisation
             .avgdl(5.0)
             .build()
             .unwrap();
@@ -753,7 +763,7 @@ mod tests {
         let vectorizer_full_norm = Bm25VectorizerBuilder::new()
             .tokenizer(MockWhitespaceTokenizer)
             .token_indexer(MockDictionaryTokenIndexer::new())
-            .b(1.0)  // Full length normalisation
+            .b(1.0) // Full length normalisation
             .avgdl(5.0)
             .build()
             .unwrap();
@@ -769,7 +779,12 @@ mod tests {
         // With no normalisation, longer docs don't get penalised as much
         // With full normalisation, values should be more similar between docs
         let hello_long_no_norm = long_no_norm.0.iter().find(|t| t.index == 0).unwrap().value;
-        let hello_long_full_norm = long_full_norm.0.iter().find(|t| t.index == 0).unwrap().value;
+        let hello_long_full_norm = long_full_norm
+            .0
+            .iter()
+            .find(|t| t.index == 0)
+            .unwrap()
+            .value;
         let hello_short_no_norm = short_no_norm.0.iter().find(|t| t.index == 0).unwrap().value;
 
         // Length normalisation should make long document values lower
@@ -799,7 +814,10 @@ mod tests {
         let result_with_delta = vectorizer_with_delta.vectorize("hello");
 
         // Delta should add to all values
-        assert_eq!(result_with_delta.0[0].value, result_no_delta.0[0].value + 0.5);
+        assert_eq!(
+            result_with_delta.0[0].value,
+            result_no_delta.0[0].value + 0.5
+        );
     }
 
     #[cfg(not(feature = "parallelism"))]
